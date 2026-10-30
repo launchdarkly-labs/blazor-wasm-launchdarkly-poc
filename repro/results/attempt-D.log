@@ -1,0 +1,10 @@
+[log] REPRO[D browser handler + polling + no events]: calling LdClient.InitAsync ...
+[error] 2026-10-26 20:38:31.231 +00:00 [LaunchDarkly.Sdk] INFO: Starting LaunchDarkly Client 5.10.2.0 built with target framework net8.0
+[error] 2026-10-26 20:38:31.272 +00:00 [LaunchDarkly.Sdk] INFO: Network availability is now True
+[error] 2026-10-26 20:38:31.331 +00:00 [LaunchDarkly.Sdk] WARN: You should only disable the streaming API if instructed to do so by LaunchDarkly support
+[error] 2026-10-26 20:38:31.335 +00:00 [LaunchDarkly.Sdk.DataSource] INFO: Starting LaunchDarkly PollingProcessor with interval: 00:05:00
+[error] 2026-10-26 20:38:31.432 +00:00 [LaunchDarkly.Sdk.DataSource] INFO: Initialized LaunchDarkly Polling Processor.
+[log] REPRO[D browser handler + polling + no events]: Initialized=True State=Valid LastError=none max-items=10 new-checkout=True
+[error] 2026-10-26 20:38:31.445 +00:00 [LaunchDarkly.Sdk] INFO: Shutting down the LaunchDarkly client
+[log] REPRO: done
+stub requests: ['GET /msdk/evalx/contexts/eyJraW5kIjoidXNlciI'] events 0

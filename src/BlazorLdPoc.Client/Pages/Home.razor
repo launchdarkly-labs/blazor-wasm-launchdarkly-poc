@@ -1,0 +1,104 @@
+@page "/"
+@implements IDisposable
+@inject ILaunchDarklyClient LD
+
+<PageTitle>Blazor + LaunchDarkly</PageTitle>
+
+<h1>Blazor WebAssembly + LaunchDarkly JS SDK</h1>
+
+<p class="muted">Init: <strong id="init-status">@(LD.InitResult?.Status ?? "not started")</strong>
+    @if (LD.InitResult?.Error is { } err) { <span> (@err)</span> }
+    · Context: <code id="context-key">@_contextLabel</code></p>
+
+<section class="card">
+    <h2>Flags</h2>
+    <dl>
+        <dt>demo-banner (string)</dt>
+        <dd id="flag-banner" class="banner">@_banner</dd>
+        <dt>max-items (int)</dt>
+        <dd id="flag-max-items">@_maxItems</dd>
+        <dt>theme-config (JSON)</dt>
+        <dd id="flag-theme">@(_theme is null ? "(default)" : $"color={_theme.Color}, rounded={_theme.Rounded}")</dd>
+        <dt>new-checkout (bool) via &lt;FeatureFlag&gt;</dt>
+        <dd id="flag-checkout">
+            <FeatureFlag Key="new-checkout">
+                <ChildContent><span class="on">New checkout is ON</span></ChildContent>
+                <Off><span class="off">Classic checkout</span></Off>
+            </FeatureFlag>
+        </dd>
+    </dl>
+    <p class="muted">Flag change events received: <strong id="change-count">@_changeCount</strong>
+        @if (_lastChanged.Count > 0) { <span> · last: <code id="last-changed">@string.Join(", ", _lastChanged)</code></span> }</p>
+</section>
+
+<section class="card">
+    <h2>Context</h2>
+    <button id="btn-alice" @onclick='() => Identify(LdContexts.User("user-123", "Alice", new Dictionary<string, object?> { ["plan"] = "gold" }))'>Identify Alice (user-123)</button>
+    <button id="btn-bob" @onclick='() => Identify(LdContexts.User("user-456", "Bob"))'>Identify Bob (user-456)</button>
+    <button id="btn-anon" @onclick="() => Identify(LdContexts.Anonymous())">Anonymous</button>
+    @if (_identifyStatus is not null) { <p class="muted">identify: <span id="identify-status">@_identifyStatus</span></p> }
+</section>
+
+<section class="card">
+    <h2>Events</h2>
+    <button id="btn-track" @onclick="Track">Track "checkout-clicked" (+ flush)</button>
+    @if (_trackStatus is not null) { <p class="muted" id="track-status">@_trackStatus</p> }
+</section>
+
+@code {
+    private sealed record ThemeConfig(string Color, bool Rounded);
+
+    private string _banner = "";
+    private int _maxItems;
+    private ThemeConfig? _theme;
+    private int _changeCount;
+    private IReadOnlyList<string> _lastChanged = Array.Empty<string>();
+    private string _contextLabel = "";
+    private string? _identifyStatus;
+    private string? _trackStatus;
+    private int _trackCount;
+
+    protected override void OnInitialized()
+    {
+        LD.FlagChanged += OnFlagsChanged;
+        Evaluate();
+    }
+
+    private void Evaluate()
+    {
+        _banner = LD.StringVariation("demo-banner", "(default banner)");
+        _maxItems = LD.IntVariation("max-items", 3);
+        _theme = LD.JsonVariation<ThemeConfig>("theme-config", null);
+        var flags = LD.AllFlags(); // used here only to show the call works
+        var ctx = LD.GetContext();
+        var key = ctx?.TryGetProperty("key", out var k) == true ? k.GetString() : "?";
+        var anon = ctx?.TryGetProperty("anonymous", out var a) == true && a.GetBoolean();
+        _contextLabel = $"{key}{(anon ? " (anonymous)" : "")} · {flags.Count} flags";
+    }
+
+    private void OnFlagsChanged(object? sender, FlagsChangedEventArgs e)
+    {
+        _changeCount++;
+        _lastChanged = e.Keys;
+        Evaluate();
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    private async Task Identify(Dictionary<string, object?> ctx)
+    {
+        _identifyStatus = "identifying…";
+        var result = await LD.IdentifyAsync(ctx);
+        _identifyStatus = result.Status + (result.Error is null ? "" : $" ({result.Error})");
+        Evaluate();
+    }
+
+    private async Task Track()
+    {
+        _trackCount++;
+        await LD.TrackAsync("checkout-clicked", new { source = "blazor-demo", n = _trackCount }, 42.5);
+        var flush = await LD.FlushAsync();
+        _trackStatus = $"tracked #{_trackCount}; flush result={flush.Result}{(flush.Error is null ? "" : " " + flush.Error)}";
+    }
+
+    public void Dispose() => LD.FlagChanged -= OnFlagsChanged;
+}

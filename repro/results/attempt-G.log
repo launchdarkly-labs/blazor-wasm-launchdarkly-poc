@@ -1,0 +1,10 @@
+[error] 2026-10-26 20:40:43.669 +00:00 [LaunchDarkly.Sdk] INFO: Starting LaunchDarkly Client 5.10.2.0 built with target framework net8.0
+[error] 2026-10-26 20:40:43.720 +00:00 [LaunchDarkly.Sdk] INFO: Network availability is now True
+[log] REPRO[G]: Initialized=True demo-banner='Hello from the LaunchDarkly stub (initial)'
+[log] REPRO[G]: waiting for stream patch (test pushes one) ...
+[log] REPRO[G]: FlagValueChanged demo-banner: "Hello from the LaunchDarkly stub (initial)" -> "patched-for-dotnet"
+[log] REPRO[G]: patch received=True demo-banner='patched-for-dotnet'
+[log] REPRO[G]: IdentifyAsync(user-456)=True max-items=5
+[log] REPRO[G]: sync Identify(user-123)=False max-items=5
+[log] REPRO: done
+stub requests: ['GET /meval/eyJraW5kIjoidXNlciIsImtleSI6InVzZ', 'GET /meval/eyJraW5kIjoidXNlciIsImtleSI6InVzZ', 'GET /meval/eyJraW5kIjoidXNlciIsImtleSI6InVzZ'] events 0

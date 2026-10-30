@@ -1,0 +1,33 @@
+@* Renders ChildContent when a boolean flag is on, Off content otherwise; re-renders on flag changes. *@
+@implements IDisposable
+@inject ILaunchDarklyClient LD
+
+@if (_on)
+{
+    @ChildContent
+}
+else
+{
+    @Off
+}
+
+@code {
+    [Parameter, EditorRequired] public string Key { get; set; } = "";
+    [Parameter] public bool Default { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public RenderFragment? Off { get; set; }
+
+    private bool _on;
+
+    protected override void OnInitialized() => LD.FlagChanged += OnFlagsChanged;
+    protected override void OnParametersSet() => _on = LD.BoolVariation(Key, Default);
+
+    private void OnFlagsChanged(object? sender, FlagsChangedEventArgs e)
+    {
+        if (!e.Keys.Contains(Key)) return;
+        _on = LD.BoolVariation(Key, Default);
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose() => LD.FlagChanged -= OnFlagsChanged;
+}

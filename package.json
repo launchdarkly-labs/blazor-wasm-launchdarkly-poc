@@ -1,0 +1,14 @@
+{
+  "name": "blazor-ld-poc-tools",
+  "private": true,
+  "description": "Pins the LaunchDarkly browser SDK that is vendored into wwwroot/lib, plus the local stub + Playwright check.",
+  "scripts": {
+    "vendor-ld-sdk": "node -e \"const fs=require('fs');const src='node_modules/@launchdarkly/js-client-sdk/dist/index.js';fs.writeFileSync('src/BlazorLdPoc.Client/wwwroot/lib/launchdarkly/js-client-sdk-4.13.0.js',fs.readFileSync(src,'utf8').replace('//# sourceMappingURL=index.js.map',''))\"",
+    "stub": "node tools/ld-stub/stub.js 5199",
+    "verify": "node tools/verify/verify.js stub && echo restart server with ASPNETCORE_ENVIRONMENT=StubBootstrap, then: node tools/verify/verify.js bootstrap"
+  },
+  "devDependencies": {
+    "@launchdarkly/js-client-sdk": "4.13.0",
+    "playwright": "^1.64.1"
+  }
+}

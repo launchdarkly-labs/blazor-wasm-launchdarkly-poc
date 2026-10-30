@@ -1,0 +1,19 @@
+PASS  app rendered after LD init gate  — {"ms":1883,"initStatus":"complete"}
+PASS  initial string flag from eval endpoint  — "Hello from the LaunchDarkly stub (initial)"
+PASS  int flag (anonymous context => 4)  — "4"
+PASS  JSON flag deserialized  — "color=#3b82f6, rounded=False"
+PASS  <FeatureFlag> off for anonymous  — "Classic checkout"
+PASS  SDK polled eval endpoint with anonymous generated key  — "c77217eb-ece6-4a70-97c0-0b5501fb7750"
+PASS  SSE stream connection open  — {"openStreams":1}
+PASS  streamed patch re-rendered via C# FlagChanged event  — {"pushedTo":1,"ms":12,"changeCount":"1","lastChanged":"demo-banner"}
+PASS  identify(Alice) re-evaluated: <FeatureFlag> on  — "New checkout is ON"
+PASS  identify(Alice) re-evaluated: max-items 10  — "10"
+PASS  stub saw eval + stream for user-123  — ["sdk","eval"]
+PASS  track + flush returned  — "tracked #1; flush result=True"
+PASS  custom event received by stub  — {"key":"checkout-clicked","data":{"source":"blazor-demo","n":1},"metricValue":42.5,"context":{"plan":"gold","name":"Alice","key":"user-123","kind":"user"}}
+PASS  event kinds received  — ["identify","feature","custom","summary"]
+PASS  identify(Bob) re-evaluated: max-items 5, checkout off  — "5"
+PASS  events flushed on pagehide (navigate away)  — {"batchesBefore":1,"batchesAfter":2,"lastBatchKinds":["feature","identify","summary"]}
+PASS  no console errors  — []
+
+17/17 checks passed (stub)

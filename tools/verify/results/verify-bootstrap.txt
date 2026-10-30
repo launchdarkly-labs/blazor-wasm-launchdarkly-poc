@@ -1,0 +1,9 @@
+PASS  app rendered after LD init gate  — {"ms":2031,"initStatus":"complete"}
+PASS  first rendered banner came from .NET server SDK bootstrap  — ["Hello from the .NET server SDK (bootstrap)","Hello from the LaunchDarkly stub (initial)"]
+PASS  bootstrapped context is server-decided user-123: <FeatureFlag> ON on first render  — "New checkout is ON"
+PASS  no polling eval request (bootstrap used instead)  — ["/sdk/goals","/events/diagnostic","/eval/stub-env-id"]
+PASS  stream opened for user-123 with secure-mode hash h=..., verified by stub  — {"contextKey":"user-123","h":"7c15b166a66c…","hashValid":true}
+PASS  stream put then reconciled values (banner history)  — ["Hello from the .NET server SDK (bootstrap)","Hello from the LaunchDarkly stub (initial)"]
+PASS  no console errors  — []
+
+7/7 checks passed (bootstrap)

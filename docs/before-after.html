@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Blazor + LaunchDarkly: before and after</title>
+<style>
+  :root { --ink:#1f2328; --muted:#59636e; --line:#d1d9e0; --bg:#f6f8fa; --new:#1a7f37; --ld:#6639ba; }
+  * { box-sizing: border-box; }
+  body { margin:0; font:16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color:var(--ink); background:#fff; }
+  main { max-width: 1040px; margin: 0 auto; padding: 40px 24px 80px; }
+  h1 { font-size: 30px; margin: 0 0 6px; }
+  h2 { font-size: 24px; margin: 56px 0 8px; padding-top: 16px; border-top: 1px solid var(--line); }
+  h3 { font-size: 18px; margin: 28px 0 8px; }
+  p.lead { color: var(--muted); margin: 0 0 24px; }
+  code { font: 13px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--bg); padding: 1px 5px; border-radius: 4px; }
+  pre { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; overflow-x: auto; }
+  pre code { background: none; padding: 0; }
+  table { border-collapse: collapse; width: 100%; margin: 8px 0 16px; }
+  th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-weight: 600; background: var(--bg); }
+  .diagram { border: 1px solid var(--line); border-radius: 10px; padding: 20px; margin: 12px 0 8px; background: #fff; overflow-x: auto; text-align: center; }
+  .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  .pair > div { min-width: 0; }
+  @media (max-width: 820px) { .pair { grid-template-columns: 1fr; } }
+  .tag { display: inline-block; font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 999px; margin-bottom: 6px; }
+  .tag.before { background: #eaeef2; color: var(--muted); }
+  .tag.after { background: #dafbe1; color: var(--new); }
+  .legend { display: flex; gap: 18px; flex-wrap: wrap; font-size: 14px; color: var(--muted); margin: 4px 0 0; }
+  .legend span::before { content: ""; display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; border: 2px solid; }
+  .legend .l-old::before { background: #f6f8fa; border-color: #8c959f; }
+  .legend .l-new::before { background: #dafbe1; border-color: #1a7f37; }
+  .legend .l-ld::before { background: #fbefff; border-color: #6639ba; }
+  .points li { margin: 6px 0; }
+  table.files td:first-child { width: 32%; }
+  table.files ul { margin: 6px 0 0; padding-left: 20px; }
+  table.files li { margin: 3px 0; }
+  h3.phase { font-size: 16px; margin: 24px 0 4px; color: var(--muted); }
+  .kind { font-size: 12px; color: var(--muted); }
+  .part { font-size: 13px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); margin-top: 56px; }
+</style>
+</head>
+<body>
+<main>
+
+<h1>Blazor + LaunchDarkly: before and after</h1>
+<p class="lead">"Before" is a standard Blazor app with no flag service. "After" is this PoC. Client side and server side are covered separately.</p>
+<div class="legend"><span class="l-old">Existing Blazor / ASP.NET parts</span><span class="l-new">Added for LaunchDarkly</span><span class="l-ld">LaunchDarkly</span></div>
+
+<h2>What this demo does</h2>
+<p>One Blazor WebAssembly page (<code>Pages/Home.razor</code>) that reads LaunchDarkly flags from C# and reacts to them live.</p>
+<table>
+  <tr><th>On the page</th><th>What it shows</th></tr>
+  <tr><td><code>demo-banner</code> (string)</td><td>A text banner, read with <code>StringVariation</code></td></tr>
+  <tr><td><code>max-items</code> (number)</td><td>A number, read with <code>IntVariation</code></td></tr>
+  <tr><td><code>theme-config</code> (JSON)</td><td>An object deserialized into a C# record with <code>JsonVariation&lt;T&gt;</code></td></tr>
+  <tr><td><code>new-checkout</code> (boolean)</td><td><code>&lt;FeatureFlag Key="new-checkout"&gt;</code> shows "New checkout is ON" or "Classic checkout"</td></tr>
+  <tr><td>Flag change counter</td><td>Flag changes appear without a page reload</td></tr>
+  <tr><td>Identify buttons</td><td>Switch between Alice, Bob and an anonymous user; flags re-evaluate for each</td></tr>
+  <tr><td>Track button</td><td>Sends a custom event (<code>checkout-clicked</code>) and flushes it</td></tr>
+</table>
+
+<p class="part">Part A · Client side (Blazor WebAssembly in the browser)</p>
+
+<h2 style="margin-top:8px">A0. How a basic Blazor WebAssembly app works</h2>
+<p>The whole app, including the .NET runtime, is downloaded and runs inside the browser. The server only serves static files.</p>
+<div class="diagram"><pre class="mermaid">
+flowchart LR
+  subgraph SRV["Web server"]
+    F["Static files<br/>index.html, DLLs, appsettings.json"]
+  end
+  subgraph BR["Browser"]
+    direction TB
+    RT[".NET runtime<br/>(WebAssembly)"] --> P["Program.cs<br/>registers services"]
+    P --> APP["App.razor<br/>router"]
+    APP --> L["MainLayout.razor"]
+    L --> PG["Pages/Home.razor"]
+  end
+  F == "1. download everything" ==> RT
+  PG -- "2. HttpClient (browser fetch)" --> API["Your APIs"]
+  class F,RT,P,APP,L,PG,API old
+  classDef old fill:#f6f8fa,stroke:#8c959f,stroke-width:2px,color:#1f2328
+</pre></div>
+<ul class="points">
+  <li><strong>Everything is public.</strong> Config and DLLs are downloaded to the browser, so only a client-side ID can live there, never an SDK key.</li>
+  <li><strong>One thread.</strong> Code that blocks waiting on the network freezes the app.</li>
+  <li><strong>Browser networking only.</strong> All HTTP goes through the browser's <code>fetch</code>; no raw sockets or file storage. This is why the .NET client SDK breaks (see A4).</li>
+</ul>
+
+<h2>A1. Client config</h2>
+<div class="pair">
+  <div>
+    <span class="tag before">Before</span>
+    <p><code>Program.cs</code>, default host. No flag settings.</p>
+<pre><code>var builder = WebAssemblyHostBuilder.CreateDefault(args);
+builder.RootComponents.Add&lt;App&gt;("#app");
+builder.RootComponents.Add&lt;HeadOutlet&gt;("head::after");
+builder.Services.AddScoped(sp =&gt; new HttpClient {
+    BaseAddress = new Uri(builder.HostEnvironment.BaseAddress) });
+
+await builder.Build().RunAsync();</code></pre>
+  </div>
+  <div>
+    <span class="tag after">After</span>
+    <p><code>wwwroot/appsettings.json</code>, client-side ID (public by design):</p>
+<pre><code>{
+  "LaunchDarkly": {
+    "ClientSideId": "YOUR_CLIENT_SIDE_ID",
+    "InitTimeoutSeconds": 5,
+    "LogLevel": "info"
+  }
+}</code></pre>
+    <p><code>Program.cs</code> registers the facade and initializes it before the first render:</p>
+<pre><code>builder.Services.Configure&lt;LaunchDarklyOptions&gt;(
+    builder.Configuration.GetSection("LaunchDarkly"));
+builder.Services.AddSingleton&lt;LaunchDarklyClient&gt;();
+builder.Services.AddSingleton&lt;ILaunchDarklyClient&gt;(
+    sp =&gt; sp.GetRequiredService&lt;LaunchDarklyClient&gt;());
+
+var host = builder.Build();
+// loading gate: no flicker on first paint
+await host.Services.GetRequiredService&lt;ILaunchDarklyClient&gt;()
+    .InitializeAsync();
+await host.RunAsync();</code></pre>
+  </div>
+</div>
+
+<h2>A2. Client structure</h2>
+<div class="pair">
+  <div>
+    <span class="tag before">Before</span>
+    <div class="diagram"><pre class="mermaid">
+flowchart TB
+  P["Program.cs"] --> APP["App.razor / layout"]
+  APP --> PG["Razor pages<br/>and components"]
+  PG --> API["Your APIs"]
+  class P,APP,PG,API old
+  classDef old fill:#f6f8fa,stroke:#8c959f,stroke-width:2px,color:#1f2328
+</pre></div>
+  </div>
+  <div>
+    <span class="tag after">After</span>
+    <div class="diagram"><pre class="mermaid">
+flowchart TB
+  P["Program.cs<br/>+ init LaunchDarkly"] --> PG["Razor pages<br/>and components"]
+  PG --> FF["FeatureFlag.razor"]
+  PG --> IF["ILaunchDarklyClient<br/>(C# interface)"]
+  FF --> IF
+  CFG["appsettings.json<br/>client-side ID"] -.-> IF
+  IF --> FAC["LaunchDarklyClient.cs<br/>C# facade"]
+  FAC -- "JS interop" --> JS["launchdarkly-interop.js"]
+  JS --> SDK["LaunchDarkly JS SDK<br/>4.13.0 (vendored)"]
+  SDK <-- "flags, live stream,<br/>events" --> LD[("LaunchDarkly")]
+  FAC -. "FlagChanged event<br/>re-render" .-> PG
+  class P,PG old
+  class FF,IF,CFG,FAC,JS new
+  class SDK,LD ld
+  classDef old fill:#f6f8fa,stroke:#8c959f,stroke-width:2px,color:#1f2328
+  classDef new fill:#dafbe1,stroke:#1a7f37,stroke-width:2px,color:#1f2328
+  classDef ld fill:#fbefff,stroke:#6639ba,stroke-width:2px,color:#1f2328
+</pre></div>
+  </div>
+</div>
+<h3>After, step by step: who calls what</h3>
+<p>Three phases, each with only the parts involved. Calls are shown roughly as they appear in the code.</p>
+
+<h3 class="phase">Phase 1 · Startup (once, before anything is shown)</h3>
+<div class="diagram"><pre class="mermaid">
+sequenceDiagram
+  autonumber
+  participant P as Program.cs
+  participant F as LaunchDarklyClient.cs<br/>(C#35; facade)
+  participant B as launchdarkly-interop.js<br/>(JS bridge)
+  participant S as JS SDK
+  participant LD as LaunchDarkly
+  Note over P: reads LaunchDarkly section<br/>of appsettings.json
+  P->>F: InitializeAsync()
+  F->>B: import("launchdarkly-interop.js")
+  F->>F: DotNetObjectReference.Create(this)
+  Note right of F: "phone number" so JS<br/>can call C#35; back
+  F->>B: initialize(clientSideId, context, options, selfRef)
+  B->>S: import SDK file, createClient(...)
+  B->>S: client.on("change", onChange)
+  B->>S: client.start()
+  S->>LD: get flag values for this user
+  LD-->>S: all flag values
+  S->>LD: open stream (stays open)
+  S-->>B: status "complete"
+  B-->>F: LdInitResult
+  F-->>P: done
+  P->>P: host.RunAsync() shows the page
+</pre></div>
+
+<h3 class="phase">Phase 1b · Startup with server bootstrap (optional; replaces Phase 1 when <code>BootstrapUrl</code> is set)</h3>
+<p>The server works out the user and evaluates their flags first, so the browser starts with correct values and skips its own first flag request.
+If the bootstrap call fails, the client falls back to Phase 1.</p>
+<div class="diagram"><pre class="mermaid">
+sequenceDiagram
+  autonumber
+  participant P as Program.cs
+  participant F as LaunchDarklyClient.cs<br/>(C#35; facade)
+  participant E as Server endpoint<br/>/api/launchdarkly/bootstrap
+  participant C as ILdClient<br/>(.NET server SDK)
+  participant B as launchdarkly-interop.js<br/>(JS bridge)
+  participant S as JS SDK
+  participant LD as LaunchDarkly
+  P->>F: InitializeAsync()
+  F->>E: GET api/launchdarkly/bootstrap
+  E->>E: FlagContextFactory.ForRequest(http)
+  Note right of E: server decides the user<br/>(from sign-in, never from the browser)
+  E->>C: AllFlagsState(context, ClientSideOnly)
+  C-->>E: flag values (in memory, no network)
+  E->>C: SecureModeHash(context)
+  C-->>E: hash (made with the secret SDK key)
+  E-->>F: { context, hash, flags }
+  F->>B: initialize(clientSideId, context, options, selfRef, { bootstrap, hash })
+  B->>S: createClient(...), client.on("change", onChange)
+  B->>S: client.start({ bootstrap, identifyOptions: { hash } })
+  Note over S: ready at once from the bootstrap values:<br/>no first flag request
+  S-->>B: status "complete"
+  B-->>F: LdInitResult
+  F-->>P: done
+  P->>P: host.RunAsync() shows the page (correct values)
+  S->>LD: open stream with hash (h=...)
+  LD-->>S: latest values: anything newer than<br/>the bootstrap arrives as a normal change (Phase 3)
+</pre></div>
+
+<h3 class="phase">Phase 2 · First render: a component reads a flag</h3>
+<div class="diagram"><pre class="mermaid">
+sequenceDiagram
+  autonumber
+  participant H as Home.razor /<br/>FeatureFlag.razor
+  participant F as LaunchDarklyClient.cs<br/>(C#35; facade)
+  participant B as launchdarkly-interop.js<br/>(JS bridge)
+  participant S as JS SDK
+  H->>F: LD.FlagChanged += OnFlagsChanged
+  Note right of H: "tell me when flags change"
+  H->>F: LD.StringVariation("demo-banner", default)
+  F->>B: _module.Invoke("stringVariation", key, default)
+  B->>S: client.stringVariation(key, default)
+  S-->>B: value from memory (no network)
+  B-->>F: value
+  F-->>H: "Hello ..."
+  H->>H: render the value
+</pre></div>
+
+<h3 class="phase">Phase 3 · A flag changes in LaunchDarkly</h3>
+<div class="diagram"><pre class="mermaid">
+sequenceDiagram
+  autonumber
+  participant LD as LaunchDarkly
+  participant S as JS SDK
+  participant B as launchdarkly-interop.js<br/>(JS bridge)
+  participant F as LaunchDarklyClient.cs<br/>(C#35; facade)
+  participant H as Home.razor
+  participant FF as FeatureFlag.razor
+  LD->>S: stream: demo-banner = "Updated live from LaunchDarkly"
+  S->>S: update memory, compare old vs new
+  S->>B: onChange(["demo-banner"])
+  B->>F: invokeMethodAsync("OnFlagsChanged", keys)
+  Note over B,F: JS calls C#35; here.<br/>[JSInvokable] allows it.
+  F->>H: FlagChanged event (keys)
+  F->>FF: FlagChanged event (keys)
+  FF->>FF: "new-checkout" not in keys: ignore
+  H->>F: StringVariation("demo-banner") again
+  F-->>H: "Updated live from LaunchDarkly" (same path as phase 2)
+  H->>H: StateHasChanged() redraws banner + counter
+</pre></div>
+
+<h3>Files added</h3>
+<pre><code>BlazorLdPoc.Client/
+├── Program.cs                      + registers and initializes LaunchDarkly
+├── Pages/Home.razor                  demo page that uses the flags
+├── Components/FeatureFlag.razor    + on/off component, re-renders on change
+├── LaunchDarkly/                   + C# facade
+│   ├── ILaunchDarklyClient.cs
+│   ├── LaunchDarklyClient.cs
+│   ├── LaunchDarklyOptions.cs
+│   └── LdModels.cs
+└── wwwroot/
+    ├── appsettings.json            + LaunchDarkly section (client-side ID)
+    ├── js/launchdarkly-interop.js  + JS bridge called from C#
+    └── lib/launchdarkly/           + vendored LaunchDarkly JS SDK 4.13.0</code></pre>
+
+<h3>What each added file does</h3>
+<p>Listed in the order a flag value travels: settings, then the C# side, then JS, then the SDK, then the UI.</p>
+<table class="files">
+  <tr><th>File</th><th>What it does</th></tr>
+  <tr><td><code>wwwroot/appsettings.json</code><br/><span class="kind">settings</span></td>
+    <td>Holds the <code>LaunchDarkly</code> section: client-side ID, init timeout (5 seconds), log level. Downloaded by the browser, so it only ever contains the public client-side ID.
+      Variants for local testing: <code>appsettings.Stub.json</code> points the SDK at the local stub; <code>appsettings.StubBootstrap.json</code> also turns on server bootstrap.</td></tr>
+  <tr><td><code>LaunchDarkly/LaunchDarklyOptions.cs</code><br/><span class="kind">typed settings</span></td>
+    <td>C# class the <code>LaunchDarkly</code> section binds to. Optional settings include <code>BootstrapUrl</code>, <code>SdkModuleUrl</code> (use a CDN), custom endpoints and event settings.
+      <code>ToJsOptions()</code> converts them into the JS SDK's options object and leaves out anything not set, so the SDK's defaults apply.</td></tr>
+  <tr><td><code>LaunchDarkly/ILaunchDarklyClient.cs</code><br/><span class="kind">contract</span></td>
+    <td>The only thing pages and components depend on. Defines:
+      <ul>
+        <li>Typed reads: <code>BoolVariation</code>, <code>StringVariation</code>, <code>IntVariation</code>, <code>DoubleVariation</code>, <code>JsonVariation&lt;T&gt;</code>, <code>VariationDetail</code>, <code>AllFlags</code></li>
+        <li>Change notifications: <code>FlagChanged</code> event, <code>OnFlagChange(key, callback)</code> for one flag</li>
+        <li>Actions: <code>IdentifyAsync</code> (switch user), <code>TrackAsync</code> (events), <code>FlushAsync</code></li>
+      </ul>
+      Because components only see this interface, it can be mocked in tests or swapped for a native .NET SDK if issue #58 is ever fixed.</td></tr>
+  <tr><td><code>LaunchDarkly/LaunchDarklyClient.cs</code><br/><span class="kind">C# facade</span></td>
+    <td>Implements the interface.
+      <ul>
+        <li><strong>Startup (<code>InitializeAsync</code>):</strong> loads the JS bridge. If <code>BootstrapUrl</code> is set, fetches context, hash and starting flags from the server first, falling back to an anonymous user if that fails. Then starts the JS SDK.</li>
+        <li><strong>Reading flags:</strong> each variation call goes straight to JS synchronously (WASM supports in-process interop). Returns the default if the module isn't loaded. JSON flags are converted to your C# type; a wrong shape falls back to the default instead of crashing.</li>
+        <li><strong>Callbacks from JS:</strong> <code>[JSInvokable]</code> methods <code>OnFlagsChanged</code>, <code>OnFlagChanged</code>, <code>OnError</code> raise the <code>FlagChanged</code> event that makes components re-render.</li>
+        <li><strong>Cleanup:</strong> <code>DisposeAsync</code> flushes events and closes the SDK.</li>
+      </ul></td></tr>
+  <tr><td><code>LaunchDarkly/LdModels.cs</code><br/><span class="kind">data shapes</span></td>
+    <td>What passes between C# and JS:
+      <ul>
+        <li><code>LdContexts</code>: helpers to build a user or anonymous context</li>
+        <li>Result records: <code>LdInitResult</code>, <code>LdIdentifyResult</code>, <code>LdFlushResult</code>, <code>FlagsChangedEventArgs</code></li>
+        <li><code>LdEvaluationDetail</code> / <code>LdEvaluationReason</code>: why a flag returned its value</li>
+        <li><code>LdBootstrapPayload</code>: the server's <code>{ context, hash, flags }</code> response</li>
+      </ul></td></tr>
+  <tr><td><code>wwwroot/js/launchdarkly-interop.js</code><br/><span class="kind">JS bridge</span></td>
+    <td>The only code that talks to the LaunchDarkly SDK directly.
+      <ul>
+        <li><code>initialize()</code>: imports the vendored SDK, creates the client, subscribes to <code>change</code> and <code>error</code> before starting (so no update is missed), starts with bootstrap data and hash if any, then waits for initialization.</li>
+        <li>Exports one function per SDK call (<code>boolVariation</code>, <code>identify</code>, <code>track</code>, <code>flush</code>, ...) for C# to call.</li>
+        <li>Calls back into C# (<code>OnFlagsChanged</code>) when the SDK reports changes.</li>
+        <li>Flushes events when the tab is hidden or closed, so events aren't lost.</li>
+      </ul></td></tr>
+  <tr><td><code>wwwroot/lib/launchdarkly/js-client-sdk-4.13.0.js</code><br/><code>+ LICENSE.txt</code><br/><span class="kind">LaunchDarkly JS SDK</span></td>
+    <td>The official SDK, copied into the app instead of loaded from a CDN: no third-party runtime dependency, Content Security Policy friendly, deliberate upgrades.
+      <code>package.json</code> pins the version and has a <code>vendor-ld-sdk</code> script to refresh the copy.</td></tr>
+  <tr><td><code>Components/FeatureFlag.razor</code><br/><span class="kind">on/off component</span></td>
+    <td><code>&lt;FeatureFlag Key="new-checkout"&gt;…&lt;Off&gt;…&lt;/Off&gt;&lt;/FeatureFlag&gt;</code>. Reads the boolean flag and renders the main content or the <code>Off</code> content. Listens for <code>FlagChanged</code> and re-renders when its own flag changes.</td></tr>
+  <tr><td><code>Program.cs</code><br/><span class="kind">changed</span></td>
+    <td>Binds <code>LaunchDarklyOptions</code>, registers <code>LaunchDarklyClient</code> as a singleton behind <code>ILaunchDarklyClient</code>, and calls <code>InitializeAsync()</code> before the app renders. This loading gate stops flags flickering from defaults to real values.</td></tr>
+  <tr><td><code>_Imports.razor</code><br/><span class="kind">changed</span></td>
+    <td>Adds <code>@using BlazorLdPoc.Client.LaunchDarkly</code> and <code>@using BlazorLdPoc.Client.Components</code>, so every page can use <code>ILaunchDarklyClient</code> and <code>&lt;FeatureFlag&gt;</code>.</td></tr>
+  <tr><td><code>Pages/Home.razor</code><br/><span class="kind">demo page</span></td>
+    <td>Not part of the integration. Reads the four flags, counts change events, and has the Identify and Track buttons.</td></tr>
+</table>
+
+<h2>A3. Client: what changed</h2>
+<table>
+  <tr><th></th><th>Before</th><th>After</th></tr>
+  <tr><td>Code</td><td><code>Program.cs</code> and pages</td><td>+ C# facade, <code>FeatureFlag.razor</code>, JS bridge, vendored JS SDK</td></tr>
+  <tr><td>Config</td><td>none</td><td><code>LaunchDarkly</code> section in <code>appsettings.json</code></td></tr>
+  <tr><td>Credential</td><td>none</td><td>client-side ID (public)</td></tr>
+</table>
+
+<h2>A4. Why the JS SDK and not the .NET client SDK?</h2>
+<p>The LaunchDarkly .NET client-side SDK is not supported in Blazor WebAssembly
+(<a href="https://github.com/launchdarkly/dotnet-core/issues/58">launchdarkly/dotnet-core#58</a>, open).
+The JS SDK sits behind <code>ILaunchDarklyClient</code>, so it can be swapped for a native .NET SDK later without changing components.</p>
+
+<p class="part">Part B · Server side (ASP.NET Core)</p>
+
+<h2 style="margin-top:8px">B1. Server config</h2>
+<div class="pair">
+  <div>
+    <span class="tag before">Before</span>
+    <p>No flag settings.</p>
+  </div>
+  <div>
+    <span class="tag after">After</span>
+    <p>The SDK key is a secret. Keep it out of source and out of <code>wwwroot</code>; use user-secrets locally and environment variables or a vault in deployed environments:</p>
+<pre><code>dotnet user-secrets set "LaunchDarkly:SdkKey" "sdk-xxxxxxxx"
+# or
+export LaunchDarkly__SdkKey="sdk-xxxxxxxx"</code></pre>
+    <p><code>Program.cs</code> registers one shared server SDK client:</p>
+<pre><code>var sdkKey = builder.Configuration["LaunchDarkly:SdkKey"];
+builder.Services.AddSingleton&lt;ILdClient&gt;(_ =&gt;
+    new LdClient(Configuration.Builder(sdkKey)
+        .StartWaitTime(TimeSpan.FromSeconds(5)).Build()));</code></pre>
+  </div>
+</div>
+
+<h2>B2. Server structure</h2>
+<div class="pair">
+  <div>
+    <span class="tag before">Before</span>
+    <div class="diagram"><pre class="mermaid">
+flowchart TB
+  R["Incoming request"] --> E["ASP.NET Core endpoint"]
+  E --> RES["Response"]
+  class R,E,RES old
+  classDef old fill:#f6f8fa,stroke:#8c959f,stroke-width:2px,color:#1f2328
+</pre></div>
+  </div>
+  <div>
+    <span class="tag after">After</span>
+    <div class="diagram"><pre class="mermaid">
+flowchart TB
+  R["Incoming request"] --> E["ASP.NET Core endpoint<br/>e.g. /api/launchdarkly/server-eval"]
+  E -- "1. who is this?" --> FCF["FlagContextFactory<br/>builds the context"]
+  FCF -- "context" --> E
+  E -- "2. evaluate(flag, context)" --> LDS["ILdClient<br/>.NET server SDK (singleton)"]
+  LDS -- "value" --> E
+  E --> RES["Response"]
+  LDS <-- "flag rules stream<br/>SDK key" --> LD[("LaunchDarkly")]
+  class R,E,RES old
+  class FCF new
+  class LDS,LD ld
+  classDef old fill:#f6f8fa,stroke:#8c959f,stroke-width:2px,color:#1f2328
+  classDef new fill:#dafbe1,stroke:#1a7f37,stroke-width:2px,color:#1f2328
+  classDef ld fill:#fbefff,stroke:#6639ba,stroke-width:2px,color:#1f2328
+</pre></div>
+  </div>
+</div>
+
+<h3>After, step by step: who calls what</h3>
+<p>Three phases, each with only the parts involved. Calls are shown roughly as they appear in the code.
+Key difference from the client: the server SDK downloads the flag <em>rules</em> once and evaluates them in memory for whichever user a request is for.</p>
+
+<h3 class="phase">Phase 1 · Startup (first time the client is needed)</h3>
+<div class="diagram"><pre class="mermaid">
+sequenceDiagram
+  autonumber
+  participant P as Program.cs
+  participant DI as ASP.NET Core<br/>dependency injection
+  participant C as ILdClient<br/>(.NET server SDK)
+  participant LD as LaunchDarkly
+  P->>DI: AddSingleton(ILdClient, factory)
+  Note over P: SdkKey read from<br/>user-secrets or environment
+  Note over DI: factory runs once, the first<br/>time an endpoint asks for ILdClient
+  DI->>C: new LdClient(Configuration.Builder(sdkKey)<br/>.StartWaitTime(5s).Build())
+  C->>LD: connect with SDK key (secret)
+  LD-->>C: all flag rules and segments
+  C->>C: store rules in memory
+  C->>LD: keep stream open for rule changes
+  C-->>DI: ready (or after 5s timeout)
+  DI-->>P: same instance reused for every request
+  Note over C: no SDK key set: uses built-in TestData<br/>flags instead, fully offline
+</pre></div>
+
+<h3 class="phase">Phase 2 · A request evaluates flags</h3>
+<div class="diagram"><pre class="mermaid">
+sequenceDiagram
+  autonumber
+  participant R as Incoming request
+  participant E as Endpoint<br/>/api/launchdarkly/server-eval
+  participant FCF as FlagContextFactory
+  participant C as ILdClient<br/>(.NET server SDK)
+  participant LD as LaunchDarkly
+  R->>E: GET /api/launchdarkly/server-eval
+  E->>FCF: ForRequest(http)
+  FCF->>FCF: Context.Builder("user-123")<br/>.Name("Alice").Set("plan", "gold").Build()
+  FCF-->>E: context
+  E->>C: AllFlagsState(context)
+  C->>C: apply stored rules to this context<br/>(in memory, no network)
+  C-->>E: flag values for this user
+  Note over E,C: typical app code evaluates one flag:<br/>ld.BoolVariation("new-checkout", context, false)
+  E-->>R: JSON { context, flags }
+  C--)LD: later, in background: usage events (batched)
+</pre></div>
+
+<h3 class="phase">Phase 3 · A flag changes in LaunchDarkly</h3>
+<div class="diagram"><pre class="mermaid">
+sequenceDiagram
+  autonumber
+  participant LD as LaunchDarkly
+  participant C as ILdClient<br/>(.NET server SDK)
+  participant E as Endpoint
+  participant R as Next request
+  LD->>C: stream: updated rules for "new-checkout"
+  C->>C: replace rules in memory
+  Note over C: nothing is pushed anywhere.<br/>Code that must react can subscribe to<br/>ld.FlagTracker.FlagChanged
+  R->>E: next request arrives
+  E->>C: BoolVariation("new-checkout", context, false)
+  C-->>E: value from the new rules
+  E-->>R: response reflects the change
+</pre></div>
+
+<h3>Client vs server: the same change, two behaviors</h3>
+<table>
+  <tr><th></th><th>Client (JS SDK in the browser)</th><th>Server (.NET server SDK)</th></tr>
+  <tr><td>Downloads</td><td>Evaluated values for one user</td><td>Rules for all flags</td></tr>
+  <tr><td>Credential</td><td>Client-side ID (public)</td><td>SDK key (secret)</td></tr>
+  <tr><td>Who is the user?</td><td>One current context, changed with <code>IdentifyAsync</code></td><td>Passed on every call, per request</td></tr>
+  <tr><td>When a flag changes</td><td>SDK raises <code>change</code>, page re-renders</td><td>Rules update in memory; next evaluation uses them</td></tr>
+</table>
+
+<h3>What each added file does</h3>
+<table class="files">
+  <tr><th>File</th><th>What it does</th></tr>
+  <tr><td><code>BlazorLdPoc.Server.csproj</code><br/><span class="kind">changed</span></td>
+    <td>Adds the <code>LaunchDarkly.ServerSdk</code> package (8.17.2).</td></tr>
+  <tr><td><code>FlagContextFactory.cs</code><br/><span class="kind">who the user is</span></td>
+    <td>The one place that builds the LaunchDarkly context for a request. Today it returns the fixed demo user (Alice, <code>user-123</code>, plan gold); in production it would build the context from the logged-in user.</td></tr>
+  <tr><td><code>Program.cs</code><br/><span class="kind">changed</span></td>
+    <td>
+      <ul>
+        <li><strong><code>ILdClient</code> singleton:</strong> connects to real LaunchDarkly if <code>LaunchDarkly:SdkKey</code> is set; otherwise uses LaunchDarkly's built-in <code>TestData</code> with the same four demo flags, so it runs offline.</li>
+        <li><strong><code>/api/launchdarkly/server-eval</code>:</strong> example of backend code evaluating all flags for the user.</li>
+        <li><strong><code>/api/launchdarkly/bootstrap</code>:</strong> evaluates browser-visible flags on the server and returns them with the context and secure-mode hash, so the browser renders correct values on first paint. This links client and server, so it's left out of the diagrams for now.</li>
+      </ul></td></tr>
+</table>
+
+<h2>B3. Server: what changed</h2>
+<table>
+  <tr><th></th><th>Before</th><th>After</th></tr>
+  <tr><td>Code</td><td>endpoints only</td><td>+ <code>ILdClient</code> singleton, <code>FlagContextFactory</code></td></tr>
+  <tr><td>Config</td><td>none</td><td><code>LaunchDarkly:SdkKey</code> (secret, from user-secrets or environment)</td></tr>
+  <tr><td>Credential</td><td>none</td><td>SDK key (secret)</td></tr>
+  <tr><td>Evaluation</td><td>n/a</td><td>per request: pass the context on every call, no "current user"</td></tr>
+</table>
+<p>Server-side code is not affected by issue #58; the .NET server SDK is supported here.</p>
+
+<p class="part">Testing tools (not part of the integration)</p>
+<table class="files">
+  <tr><th>File</th><th>What it does</th></tr>
+  <tr><td><code>tools/ld-stub/stub.js</code></td>
+    <td>Fake LaunchDarkly service for local demos. Serves flags and the live stream, accepts events. <code>/_stub/patch</code> pushes a flag change; <code>/_stub/log</code> shows the traffic it received.</td></tr>
+  <tr><td><code>tools/verify/verify.js</code></td>
+    <td>Automated browser test: loads the page and checks flags, live updates, identify, events and flushing on page close.</td></tr>
+</table>
+
+</main>
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+  mermaid.initialize({ startOnLoad: false, theme: "base", flowchart: { curve: "basis", padding: 14 },
+    sequence: { useMaxWidth: true, actorMargin: 40, messageFontSize: 15, noteFontSize: 14, mirrorActors: false },
+    themeVariables: { fontFamily: "-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif", fontSize: "15px",
+      lineColor: "#59636e", clusterBkg: "#ffffff", clusterBorder: "#d1d9e0" } });
+
+  // Render one diagram at a time into its own box (startOnLoad mixed up containers for the sequence diagram).
+  const decode = document.createElement("textarea");
+  const blocks = [...document.querySelectorAll("pre.mermaid")];
+  for (const [i, el] of blocks.entries()) {
+    decode.innerHTML = el.innerHTML;
+    try {
+      const { svg } = await mermaid.render(`diagram-${i}`, decode.value.trim());
+      el.outerHTML = `<div class="rendered">${svg}</div>`;
+    } catch (err) {
+      el.textContent = `Diagram error: ${err.message ?? err}`;
+    }
+  }
+</script>
+</body>
+</html>

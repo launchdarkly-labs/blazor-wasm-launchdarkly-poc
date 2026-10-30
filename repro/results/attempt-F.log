@@ -1,0 +1,7 @@
+[log] REPRO[F streaming-enabled fetch handler + streaming + no events]: calling LdClient.InitAsync ...
+[error] 2026-10-26 20:39:44.380 +00:00 [LaunchDarkly.Sdk] INFO: Starting LaunchDarkly Client 5.10.2.0 built with target framework net8.0
+[error] 2026-10-26 20:39:44.423 +00:00 [LaunchDarkly.Sdk] INFO: Network availability is now True
+[log] REPRO[F streaming-enabled fetch handler + streaming + no events]: Initialized=True State=Valid LastError=none max-items=10 new-checkout=True
+[error] 2026-10-26 20:39:44.651 +00:00 [LaunchDarkly.Sdk] INFO: Shutting down the LaunchDarkly client
+[log] REPRO: done
+stub requests: ['GET /meval/eyJraW5kIjoidXNlciIsImtleSI6InVzZ'] events 0

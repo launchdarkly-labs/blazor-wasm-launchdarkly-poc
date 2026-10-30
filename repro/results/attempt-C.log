@@ -1,0 +1,6 @@
+[log] REPRO[C browser handler + polling]: calling LdClient.InitAsync ...
+[error] 2026-10-26 20:38:10.368 +00:00 [LaunchDarkly.Sdk] INFO: Starting LaunchDarkly Client 5.10.2.0 built with target framework net8.0
+[error] 2026-10-26 20:38:10.506 +00:00 [LaunchDarkly.Sdk] INFO: Network availability is now True
+[error] 2026-10-26 20:38:10.555 +00:00 [LaunchDarkly.Sdk.Events] ERROR: Unexpected error in event dispatcher thread: System.PlatformNotSupportedException: Cannot wait on monitors on this runtime.
+[repeated x74091] [LaunchDarkly.Sdk.Events] ERROR: Unexpected error in event dispatcher thread: System.PlatformNotSupportedException: Cannot wait on monitors on this runtime.
+stub requests: [] events 0

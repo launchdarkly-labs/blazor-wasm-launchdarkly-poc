@@ -1,0 +1,16 @@
+[log] REPRO[A default]: calling LdClient.InitAsync ...
+[error] 2026-10-26 20:37:28.331 +00:00 [LaunchDarkly.Sdk] INFO: Starting LaunchDarkly Client 5.10.2.0 built with target framework net8.0
+[error] 2026-10-26 20:37:28.375 +00:00 [LaunchDarkly.Sdk.DataStore] ERROR: Failure in persistent data store: System.PlatformNotSupportedException: IsolatedStorage_PlatformNotSupported
+[log] REPRO[A default]: EXCEPTION System.PlatformNotSupportedException: Arg_PlatformNotSupported
+[log]    at System.Net.Http.SocketsHttpHandler.set_AutomaticDecompression(DecompressionMethods )
+[log]    at LaunchDarkly.Sdk.Internal.Http.HttpProperties.DefaultHttpMessageHandlerFactory(HttpProperties props)
+[log]    at LaunchDarkly.Sdk.Internal.Http.HttpProperties.NewHttpClient()
+[log]    at LaunchDarkly.Sdk.Internal.Events.DefaultEventSender..ctor(HttpProperties httpProperties, EventsConfiguration config, Logger logger)
+[log]    at LaunchDarkly.Sdk.Client.Integrations.EventProcessorBuilder.Build(LdClientContext context)
+[log]    at LaunchDarkly.Sdk.Client.LdClient..ctor(Configuration configuration, Context initialContext, TimeSpan startWaitTime)
+[log]    at LaunchDarkly.Sdk.Client.LdClient.CreateInstance(Configuration configuration, Context initialContext, TimeSpan maxWaitTime)
+[log]    at LaunchDarkly.Sdk.Client.LdClient.InitAsync(Configuration config, Context initialContext, TimeSpan maxWaitTime)
+[log]    at Program.<<Main>$>g__Attempt|0_2(String name, Configuration config)
+[log] REPRO: done
+[repeated x2] System.PlatformNotSupportedException: Arg_PlatformNotSupported
+stub requests: [] events 0
